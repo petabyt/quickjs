@@ -5,13 +5,32 @@ project(quickjs LANGUAGES C)
 include(CheckCCompilerFlag)
 include(GNUInstallDirs)
 
-set(CMAKE_C_FLAGS_RELEASE -Os)
-set(CMAKE_CXX_FLAGS_RELEASE -Os)
+# note: QJS_ENABLE_TSAN is currently incompatible with the other sanitizers but we
+# don't explicitly check for that because who knows what the future will bring?
+# QJS_ENABLE_MSAN only works with clang at the time of writing; also not checked
+# for the same reason
 
+option(BUILD_SHARED_LIBS "Build a shared library" OFF)
+option(QJS_BUILD_EXAMPLES "Build examples" OFF)
+option(QJS_BUILD_TESTS "Build tests" OFF)
+option(QJS_BUILD_CLI_STATIC "Build a static qjs executable" OFF)
+option(QJS_BUILD_CLI "Build qjsc" OFF)
+option(QJS_BUILD_CLI_WITH_MIMALLOC "Build the qjs executable with mimalloc" OFF)
+option(QJS_BUILD_CLI_WITH_STATIC_MIMALLOC "Build the qjs executable with mimalloc (statically linked)" OFF)
+option(QJS_DISABLE_PARSER "Disable JS source code parser" OFF)
+option(QJS_ENABLE_ASAN "Enable AddressSanitizer (ASan)" OFF)
+option(QJS_ENABLE_MSAN "Enable MemorySanitizer (MSan)" OFF)
+option(QJS_ENABLE_TSAN "Enable ThreadSanitizer (TSan)" OFF)
+option(QJS_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer (UBSan)" OFF)
+option(QJS_BUILD_LIBC "Build standard library modules as part of the library" OFF)
+
+set(QJS_VERSION 0.1.0)
 set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 set(CMAKE_C_STANDARD 11)
+
+list(APPEND qjs_defines CONFIG_VERSION="${QJS_VERSION}")
 
 # MINGW doesn't exist in older cmake versions, newer versions don't know
 # about CMAKE_COMPILER_IS_MINGW, and there is no unique CMAKE_C_COMPILER_ID
@@ -39,9 +58,6 @@ if(NOT CMAKE_BUILD_TYPE)
     message(STATUS "No build type selected, default to Release")
     set(CMAKE_BUILD_TYPE "Release")
 endif()
-
-message(STATUS "Building in ${CMAKE_BUILD_TYPE} mode")
-message(STATUS "Building with ${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION} on ${CMAKE_SYSTEM}")
 
 macro(xcheck_add_c_compiler_flag FLAG)
     string(REPLACE "-" "" FLAG_NO_HYPHEN ${FLAG})
@@ -133,98 +149,65 @@ if(CMAKE_BUILD_TYPE MATCHES "Debug")
     xcheck_add_c_compiler_flag(-fno-omit-frame-pointer)
 endif()
 
-macro(xoption OPTION_NAME OPTION_TEXT OPTION_DEFAULT)
-    option(${OPTION_NAME} ${OPTION_TEXT} ${OPTION_DEFAULT})
-    if(DEFINED ENV{${OPTION_NAME}})
-        # Allow setting the option through an environment variable.
-        set(${OPTION_NAME} $ENV{${OPTION_NAME}})
-    endif()
-    if(${OPTION_NAME})
-        add_definitions(-D${OPTION_NAME})
-    endif()
-    message(STATUS "  ${OPTION_NAME}: ${${OPTION_NAME}}")
-endmacro()
-
-xoption(BUILD_SHARED_LIBS "Build a shared library" OFF)
-if(BUILD_SHARED_LIBS)
-    message(STATUS "Building a shared library")
-endif()
-
-# note: QJS_ENABLE_TSAN is currently incompatible with the other sanitizers but we
-# don't explicitly check for that because who knows what the future will bring?
-# QJS_ENABLE_MSAN only works with clang at the time of writing; also not checked
-# for the same reason
-xoption(QJS_BUILD_EXAMPLES "Build examples" OFF)
-xoption(QJS_BUILD_CLI_STATIC "Build a static qjs executable" OFF)
-xoption(QJS_BUILD_CLI_WITH_MIMALLOC "Build the qjs executable with mimalloc" OFF)
-xoption(QJS_BUILD_CLI_WITH_STATIC_MIMALLOC "Build the qjs executable with mimalloc (statically linked)" OFF)
-xoption(QJS_DISABLE_PARSER "Disable JS source code parser" OFF)
-xoption(QJS_ENABLE_ASAN "Enable AddressSanitizer (ASan)" OFF)
-xoption(QJS_ENABLE_MSAN "Enable MemorySanitizer (MSan)" OFF)
-xoption(QJS_ENABLE_TSAN "Enable ThreadSanitizer (TSan)" OFF)
-xoption(QJS_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer (UBSan)" OFF)
-
 if(QJS_ENABLE_ASAN)
-message(STATUS "Building with ASan")
-add_compile_options(
-    -fsanitize=address
-    -fno-sanitize-recover=all
-    -fno-omit-frame-pointer
-)
-add_link_options(
-    -fsanitize=address
-    -fno-sanitize-recover=all
-    -fno-omit-frame-pointer
-)
+    message(STATUS "Building with ASan")
+    add_compile_options(
+        -fsanitize=address
+        -fno-sanitize-recover=all
+        -fno-omit-frame-pointer
+    )
+    add_link_options(
+        -fsanitize=address
+        -fno-sanitize-recover=all
+        -fno-omit-frame-pointer
+    )
 endif()
 
 if(QJS_ENABLE_MSAN)
-message(STATUS "Building with MSan")
-add_compile_options(
-    -fsanitize=memory
-    -fno-sanitize-recover=all
-    -fno-omit-frame-pointer
-)
-add_link_options(
-    -fsanitize=memory
-    -fno-sanitize-recover=all
-    -fno-omit-frame-pointer
-)
+    message(STATUS "Building with MSan")
+    add_compile_options(
+        -fsanitize=memory
+        -fno-sanitize-recover=all
+        -fno-omit-frame-pointer
+    )
+    add_link_options(
+        -fsanitize=memory
+        -fno-sanitize-recover=all
+        -fno-omit-frame-pointer
+    )
 endif()
 
 if(QJS_ENABLE_TSAN)
-message(STATUS "Building with TSan")
-add_compile_options(
-    -fsanitize=thread
-    -fno-sanitize-recover=all
-    -fno-omit-frame-pointer
-)
-add_link_options(
-    -fsanitize=thread
-    -fno-sanitize-recover=all
-    -fno-omit-frame-pointer
-)
+    message(STATUS "Building with TSan")
+    add_compile_options(
+        -fsanitize=thread
+        -fno-sanitize-recover=all
+        -fno-omit-frame-pointer
+    )
+    add_link_options(
+        -fsanitize=thread
+        -fno-sanitize-recover=all
+        -fno-omit-frame-pointer
+    )
 endif()
 
 if(QJS_ENABLE_UBSAN)
-message(STATUS "Building with UBSan")
-add_compile_options(
-    -fsanitize=undefined
-    -fno-sanitize-recover=all
-    -fno-omit-frame-pointer
-)
-add_link_options(
-    -fsanitize=undefined
-    -fno-sanitize-recover=all
-    -fno-omit-frame-pointer
-)
+    message(STATUS "Building with UBSan")
+    add_compile_options(
+        -fsanitize=undefined
+        -fno-sanitize-recover=all
+        -fno-omit-frame-pointer
+    )
+    add_link_options(
+        -fsanitize=undefined
+        -fno-sanitize-recover=all
+        -fno-omit-frame-pointer
+    )
 endif()
 
 
 # QuickJS library
 #
-
-xoption(QJS_BUILD_LIBC "Build standard library modules as part of the library" OFF)
 macro(add_qjs_libc_if_needed target)
     if(NOT QJS_BUILD_LIBC)
         target_sources(${target} PRIVATE quickjs-libc.c)
@@ -299,90 +282,77 @@ if(EMSCRIPTEN)
     target_link_libraries(qjs_wasm m)
 endif()
 
+if(QJS_BUILD_CLI)
+    add_executable(qjsc
+            qjsc.c
+    )
+    #target_compile_options(qjsc PRIVATE -fdata-sections -ffunction-sections)
+    add_qjs_libc_if_needed(qjsc)
+    add_static_if_needed(qjsc)
+    target_compile_definitions(qjsc PRIVATE ${qjs_defines})
+    target_link_libraries(qjsc qjs)
+    #target_link_options(qjsc PRIVATE -Wl,--gc-sections)
 
-# QuickJS bytecode compiler
-#
-
-add_executable(qjsc
-    qjsc.c
-)
-#target_compile_options(qjsc PRIVATE -fdata-sections -ffunction-sections)
-add_qjs_libc_if_needed(qjsc)
-add_static_if_needed(qjsc)
-target_compile_definitions(qjsc PRIVATE ${qjs_defines})
-target_link_libraries(qjsc qjs)
-#target_link_options(qjsc PRIVATE -Wl,--gc-sections)
-
-
-# QuickJS CLI
-#
-
-add_executable(qjs_exe
-    gen/repl.c
-    gen/standalone.c
-    qjs.c
-)
-add_qjs_libc_if_needed(qjs_exe)
-add_static_if_needed(qjs_exe)
-set_target_properties(qjs_exe PROPERTIES
-    OUTPUT_NAME "qjs"
-)
-target_compile_definitions(qjs_exe PRIVATE ${qjs_defines})
-target_link_libraries(qjs_exe qjs)
-if(NOT WIN32)
-    set_target_properties(qjs_exe PROPERTIES ENABLE_EXPORTS TRUE)
-endif()
-if(QJS_BUILD_CLI_WITH_MIMALLOC OR QJS_BUILD_CLI_WITH_STATIC_MIMALLOC)
-    find_package(mimalloc REQUIRED)
-    # Upstream mimalloc doesn't provide a way to know if both libraries are supported.
-    if(QJS_BUILD_CLI_WITH_STATIC_MIMALLOC)
-        target_link_libraries(qjs_exe mimalloc-static)
-    else()
-        target_link_libraries(qjs_exe mimalloc)
+    add_executable(qjs_exe
+        gen/repl.c
+        gen/standalone.c
+        qjs.c
+    )
+    add_qjs_libc_if_needed(qjs_exe)
+    add_static_if_needed(qjs_exe)
+    set_target_properties(qjs_exe PROPERTIES
+        OUTPUT_NAME "qjs"
+    )
+    target_compile_definitions(qjs_exe PRIVATE ${qjs_defines})
+    target_link_libraries(qjs_exe qjs)
+    if(NOT WIN32)
+        set_target_properties(qjs_exe PROPERTIES ENABLE_EXPORTS TRUE)
+    endif()
+    if(QJS_BUILD_CLI_WITH_MIMALLOC OR QJS_BUILD_CLI_WITH_STATIC_MIMALLOC)
+        find_package(mimalloc REQUIRED)
+        # Upstream mimalloc doesn't provide a way to know if both libraries are supported.
+        if(QJS_BUILD_CLI_WITH_STATIC_MIMALLOC)
+            target_link_libraries(qjs_exe mimalloc-static)
+        else()
+            target_link_libraries(qjs_exe mimalloc)
+        endif()
     endif()
 endif()
 
-# Test262 runner
-#
+if(QJS_BUILD_TESTS)
+    if(NOT EMSCRIPTEN)
+        add_executable(run-test262
+                run-test262.c
+        )
+        add_qjs_libc_if_needed(run-test262)
+        target_compile_definitions(run-test262 PRIVATE ${qjs_defines})
+        target_link_libraries(run-test262 qjs)
+    endif()
 
-if(NOT EMSCRIPTEN)
-    add_executable(run-test262
-        run-test262.c
+    add_executable(api-test
+        api-test.c
     )
-    add_qjs_libc_if_needed(run-test262)
-    target_compile_definitions(run-test262 PRIVATE ${qjs_defines})
-    target_link_libraries(run-test262 qjs)
+    target_compile_definitions(api-test PRIVATE ${qjs_defines})
+    target_link_libraries(api-test qjs)
+
+    # Unicode generator
+    #
+
+    add_executable(unicode_gen EXCLUDE_FROM_ALL
+        cutils.c
+        libunicode.c
+        unicode_gen.c
+    )
+    target_compile_definitions(unicode_gen PRIVATE ${qjs_defines})
+
+    add_executable(function_source
+        gen/function_source.c
+    )
+    add_qjs_libc_if_needed(function_source)
+    target_include_directories(function_source PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_definitions(function_source PRIVATE ${qjs_defines})
+    target_link_libraries(function_source qjs)
 endif()
-
-# Interrupt test
-#
-
-add_executable(api-test
-    api-test.c
-)
-target_compile_definitions(api-test PRIVATE ${qjs_defines})
-target_link_libraries(api-test qjs)
-
-# Unicode generator
-#
-
-add_executable(unicode_gen EXCLUDE_FROM_ALL
-    cutils.c
-    libunicode.c
-    unicode_gen.c
-)
-target_compile_definitions(unicode_gen PRIVATE ${qjs_defines})
-
-add_executable(function_source
-    gen/function_source.c
-)
-add_qjs_libc_if_needed(function_source)
-target_include_directories(function_source PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_definitions(function_source PRIVATE ${qjs_defines})
-target_link_libraries(function_source qjs)
-
-# Examples
-#
 
 if(QJS_BUILD_EXAMPLES)
     add_executable(hello
@@ -437,23 +407,15 @@ endif()
 
 # Install target
 #
-
-file(STRINGS quickjs.h quickjs_h REGEX QJS_VERSION)
-string(REGEX MATCH "QJS_VERSION_MAJOR ([0-9]*)" _ "${quickjs_h}")
-set(QJS_VERSION_MAJOR ${CMAKE_MATCH_1})
-string(REGEX MATCH "QJS_VERSION_MINOR ([0-9]*)" _ "${quickjs_h}")
-set(QJS_VERSION_MINOR ${CMAKE_MATCH_1})
-string(REGEX MATCH "QJS_VERSION_PATCH ([0-9]*)" _ "${quickjs_h}")
-set(QJS_VERSION_PATCH ${CMAKE_MATCH_1})
 set_target_properties(qjs PROPERTIES
-    VERSION ${QJS_VERSION_MAJOR}.${QJS_VERSION_MINOR}.${QJS_VERSION_PATCH}
-    SOVERSION ${QJS_VERSION_MAJOR}
+    VERSION ${QJS_VERSION}
+    SOVERSION 1
 )
 install(FILES quickjs.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 if(QJS_BUILD_LIBC)
     install(FILES quickjs-libc.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
-if(NOT IOS AND NOT TVOS AND NOT WATCHOS)
+if(NOT IOS AND NOT TVOS AND NOT WATCHOS AND QJS_BUILD_CLI)
     install(TARGETS qjs_exe RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     install(TARGETS qjsc RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
