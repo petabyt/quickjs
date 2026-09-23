@@ -25,7 +25,7 @@ option(QJS_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer (UBSan)" OFF)
 option(QJS_BUILD_LIBC "Build standard library modules as part of the library" OFF)
 
 set(QJS_VERSION 0.1.0)
-set(CMAKE_C_VISIBILITY_PRESET hidden)
+#set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 set(CMAKE_C_STANDARD 11)
